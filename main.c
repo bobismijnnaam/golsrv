@@ -96,8 +96,20 @@ void printField(bool* field) {
 }
 
 void risingFPGA_CLK() {
+
 	switch (state) {
 	case STATE_RECV:
+		printf("%d|%d%d%d%d%d%d%d%d%d%d\n",digitalRead(FPGA_CLK),
+				digitalRead(D[0]),
+				digitalRead(D[1]),
+				digitalRead(D[2]),
+				digitalRead(D[3]),
+				digitalRead(D[4]),
+				digitalRead(D[5]),
+				digitalRead(D[6]),
+				digitalRead(D[7]),
+				digitalRead(D[8]),
+				digitalRead(D[9]));
 		// Read pins D[0..DW] and save them in array
 		for (int i = 0; i < DW; ++i) {
 			recvField[stateCtr + i] = digitalRead(D[i]) == HIGH ? 1 : 0;
@@ -119,10 +131,12 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 			// TODO: Temporary
 			printField(swapField);
+			int a = 1/0;
 		} else {
 			// CARRY ON huehuehuehue
 			// As in wait for next delivery
 		}
+
 		break;
 	case STATE_RUNNING:
 		// Set pin to 0
@@ -131,6 +145,7 @@ void risingFPGA_CLK() {
 		if (digitalRead(D[0]) == HIGH) {
 			state = STATE_RECV;
 			stateCtr = 0;
+			printf("FPGA is going to send\n");
 		} else {
 			if (pauseGOL) {
 				pauseGOL = 0;
@@ -238,11 +253,13 @@ int main(void) {
 
 	// Set fpga clock pin to input and register rising edge function
 	pinMode(FPGA_CLK, INPUT);
+	pullUpDnControl(FPGA_CLK, PUD_DOWN);
 	wiringPiISR(FPGA_CLK, INT_EDGE_RISING, risingFPGA_CLK);
 
 	// Set the data pins to input and register the rising edge function for D[0]
 	for (int i = 0; i < DW; ++i) {
 		pinMode(D[i], INPUT);
+		pullUpDnControl(D[i], PUD_DOWN);
 	}
 
 	for (;;) {
