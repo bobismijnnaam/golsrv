@@ -37,6 +37,11 @@ bool pauseGOL = 0;
 bool pauseSent = 0;
 pthread_mutex_t pauseMutex;
 
+// Resetting variables
+bool resetGOL = 0;
+bool resetSent = 0;
+pthread_mutex_t resetMutex;
+
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
 		return MG_TRUE;   // Authorize all requests
@@ -66,17 +71,27 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 					currField[i + 9]);
 		}
 
-		return MG_TRUE;   // Mark as processed
+		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
-		if (!pauseSent) {
+		if (state != STATE_PAUSED) {
 			pthread_mutex_lock(&pauseMutex);
 
 			pauseGOL = 1;
 
 			pthread_mutex_unlock(&pauseMutex);
 		}
+
+		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
-		
+		if (!resetSent && (state == STATE_PAUSED || pauseGOL))) {
+			pthread_mutex_lock(&resetMutex);
+
+			resetGOL = 1;
+			
+			pthread_mutex_unlock(&resetMutex);
+		}	
+
+		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
 
 	} else {
@@ -129,6 +144,15 @@ void risingFPGA_CLK() {
 		if (digitalRead(D[0]) == HIGH) {
 			state = STATE_RECV;
 			stateCtr = 0;
+		} else {
+			if (pauseGOL) {
+				pthread_mutex_lock(&pauseMutex);
+
+				pauseGOL = 0;
+				state = STATE_PAUSED;
+
+				pthread_mutex_unlock(&pauseMutex);
+			}
 		}
 		break;
 	case STATE_STARTING:
@@ -155,10 +179,51 @@ void risingFPGA_CLK() {
 			break;
 		}
 		break;
-	case STATE_PAUSED:
-		// FPGA is waiting for instructions huehuehue
-		// TODO
+	case STATE_PAUSING:
+		switch (stateCtr) {
+		case 0:
+			// Set message pin to 1
+			digitalWrite(PI_OUT, HIGH);
+			// Increment stateCtr
+			++stateCtr;
+			break;
+		case 1:
+			digitalWrite(PI_OUT, LOW);
+			stateCtr = 0;
+			state = STATE_PAUSED;
+			break;
+		}
 		break;
+	case STATE_PAUSED:
+		if (resetGOL) {
+			state = STATE_RESETTING;
+			stateCtr = 0;
+		}
+		break;
+	case STATE_RESETTING:
+		switch (stateCtr) {
+		case 0:
+			digitalWrite(PI_OUT, HIGH);
+			++stateCtr;
+			break;
+		case 1:
+			digitalWrite(PI_OUT, LOW);
+			++stateCtr;
+			break;
+		case 2:
+			digitalWrite(PI_OUT, HIGH);
+			++stateCtr;
+			break;
+		case 3:
+			digitalWrite(PI_OUT, LOW);
+			pthread_mutex_lock(&resetMutex);
+
+			resetGOL = 0;
+
+			pthread_mutex_unlock(&resetMutex);
+			state = STATE_PAUSED;
+			break;
+		}
 	case STATE_SENDING:
 		stateCtr = 1/0; 	// This block is not allowed to be executed yet
 		break;				// Grammar is important
