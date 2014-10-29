@@ -11,7 +11,7 @@
 const int PI_OUT = 11;
 const int FPGA_CLK = 0;
 #define DW 10
-const int D[10] = {1, 2, 3, 3, 5, 6, 7, 8, 9, 10};
+const int D[DW] = {1, 2, 3, 3, 5, 6, 7, 8, 9, 10};
 
 // Field memory
 const int SIZE = 10;
@@ -34,13 +34,15 @@ int stateCtr = 0;			// Variable to keep track how many signals are sent in the s
 
 // Pausing variables
 bool pauseGOL = 0;
-bool pauseSent = 0;
 pthread_mutex_t pauseMutex;
 
 // Resetting variables
 bool resetGOL = 0;
-bool resetSent = 0;
 pthread_mutex_t resetMutex;
+
+// Starting variables
+bool startGOL = 1;
+pthread_mutex_t startMutex;
 
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
@@ -92,8 +94,14 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 		}	
 
 		return MG_TRUE;
-	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
+	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
+		if (state == STATE_PAUSED && !startGOL) {
+			pthread_mutex_lock(&startMutex);
 
+			startGOL = 1;
+
+			pthread_mutex_unlock(&startMutex);
+		}
 	} else {
 		return MG_FALSE;  // Rest of the events are not processed
 	}
@@ -149,7 +157,7 @@ void risingFPGA_CLK() {
 				pthread_mutex_lock(&pauseMutex);
 
 				pauseGOL = 0;
-				state = STATE_PAUSED;
+				state = STATE_PAUSING;
 
 				pthread_mutex_unlock(&pauseMutex);
 			}
@@ -198,6 +206,9 @@ void risingFPGA_CLK() {
 		if (resetGOL) {
 			state = STATE_RESETTING;
 			stateCtr = 0;
+		} else if (startGOL) {
+			state = STATE_STARTING;
+			stateCtr = 0;
 		}
 		break;
 	case STATE_RESETTING:
@@ -240,6 +251,8 @@ int main(void) {
 	printField(recvField);
 
 	pthread_mutex_init(&swapMutex, NULL);
+	pthread_mutex_init(&resetMutex, NULL);
+	pthread_mutex_init(&pauseMutex, NULL);
 
 	// printf("Starting server at 130.89.160.100:8080\n");
 
@@ -270,6 +283,8 @@ int main(void) {
 	// mg_destroy_server(&server);
 	
 	pthread_mutex_destroy(&swapMutex);
+	pthread_mutex_destroy(&resetMutex);
+	pthread_mutex_destroy(&pauseMutex);
 
 	free(currField);
 	free(recvField);
