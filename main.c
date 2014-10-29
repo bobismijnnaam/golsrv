@@ -24,25 +24,24 @@ bool newField = 0;
 pthread_mutex_t swapMutex;
 
 // States of the game of life
-#define STATE_RECV 1 		// FPGA is sending a field
-#define STATE_RUNNING 	2	// Waiting for the FPGA to send a field
-#define STATE_PAUSED 	3	// FPGA is paused
-#define STATE_STARTING 	4 	// Sending start signal to FPGA
-#define STATE_SENDING 	5	// Pi is sending... Data?
-int state = STATE_RUNNING;	// Variable holding the state
-int stateCtr = 0;			// Variable to keep track how many signals are sent in the state
+#define STATE_RECV 			1 	// FPGA is sending a field
+#define STATE_RUNNING 		2	// Waiting for the FPGA to send a field
+#define STATE_PAUSED 		3	// FPGA is paused
+#define STATE_STARTING 		4 	// Sending start signal to FPGA
+#define STATE_SENDING 		5	// Pi is sending... Data?
+#define STATE_PAUSING 		6	// Pi is sending one pause bit
+#define STATE_RESETTING		7	// Pi is sending resetting sequence
+int state = STATE_RUNNING;		// Variable holding the state
+int stateCtr = 0;				// Variable to keep track how many signals are sent in the state
 
 // Pausing variables
 bool pauseGOL = 0;
-pthread_mutex_t pauseMutex;
 
 // Resetting variables
 bool resetGOL = 0;
-pthread_mutex_t resetMutex;
 
 // Starting variables
 bool startGOL = 1;
-pthread_mutex_t startMutex;
 
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
@@ -75,33 +74,17 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
-		if (state != STATE_PAUSED) {
-			pthread_mutex_lock(&pauseMutex);
-
-			pauseGOL = 1;
-
-			pthread_mutex_unlock(&pauseMutex);
-		}
+		pauseGOL = 1;
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
-		if (!resetSent && (state == STATE_PAUSED || pauseGOL))) {
-			pthread_mutex_lock(&resetMutex);
-
-			resetGOL = 1;
-			
-			pthread_mutex_unlock(&resetMutex);
-		}	
+		resetGOL = 1;
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
-		if (state == STATE_PAUSED && !startGOL) {
-			pthread_mutex_lock(&startMutex);
+		startGOL = 1;
 
-			startGOL = 1;
-
-			pthread_mutex_unlock(&startMutex);
-		}
+		return MG_TRUE;
 	} else {
 		return MG_FALSE;  // Rest of the events are not processed
 	}
@@ -154,12 +137,8 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 		} else {
 			if (pauseGOL) {
-				pthread_mutex_lock(&pauseMutex);
-
 				pauseGOL = 0;
 				state = STATE_PAUSING;
-
-				pthread_mutex_unlock(&pauseMutex);
 			}
 		}
 		break;
@@ -227,11 +206,7 @@ void risingFPGA_CLK() {
 			break;
 		case 3:
 			digitalWrite(PI_OUT, LOW);
-			pthread_mutex_lock(&resetMutex);
-
 			resetGOL = 0;
-
-			pthread_mutex_unlock(&resetMutex);
 			state = STATE_PAUSED;
 			break;
 		}
@@ -251,8 +226,6 @@ int main(void) {
 	printField(recvField);
 
 	pthread_mutex_init(&swapMutex, NULL);
-	pthread_mutex_init(&resetMutex, NULL);
-	pthread_mutex_init(&pauseMutex, NULL);
 
 	// printf("Starting server at 130.89.160.100:8080\n");
 
@@ -283,8 +256,6 @@ int main(void) {
 	// mg_destroy_server(&server);
 	
 	pthread_mutex_destroy(&swapMutex);
-	pthread_mutex_destroy(&resetMutex);
-	pthread_mutex_destroy(&pauseMutex);
 
 	free(currField);
 	free(recvField);
