@@ -67,6 +67,18 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 		}
 
 		return MG_TRUE;   // Mark as processed
+	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
+		if (!pauseSent) {
+			pthread_mutex_lock(&pauseMutex);
+
+			pauseGOL = 1;
+
+			pthread_mutex_unlock(&pauseMutex);
+		}
+	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
+		
+	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
+
 	} else {
 		return MG_FALSE;  // Rest of the events are not processed
 	}
