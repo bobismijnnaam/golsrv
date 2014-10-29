@@ -35,13 +35,37 @@ int stateCtr = 0;			// Variable to keep track how many signals are sent in the s
 // Pausing variables
 bool pauseGOL = 0;
 bool pauseSent = 0;
-pthread_mytex_t pauseMutex;
+pthread_mutex_t pauseMutex;
 
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
 		return MG_TRUE;   // Authorize all requests
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/gol")) {
-		mg_printf_data(conn, "%s", "110101011");
+		if (newField) {
+			pthread_mutex_lock(&swapMutex);
+			
+			bool* tempSwapField = currField;
+			currField = swapField;
+			swapField = tempSwapField;
+			newField = 0;
+
+			pthread_mutex_unlock(&swapMutex);
+		}
+
+		for (int i = 0; i < SIZE * SIZE; i += DW) {
+			mg_printf_data(conn, "%d%d%d%d%d%d%d%d%d%d",
+					currField[i + 0],
+					currField[i + 1],
+					currField[i + 2],
+					currField[i + 3],
+					currField[i + 4],
+					currField[i + 5],
+					currField[i + 6],
+					currField[i + 7],
+					currField[i + 8],
+					currField[i + 9]);
+		}
+
 		return MG_TRUE;   // Mark as processed
 	} else {
 		return MG_FALSE;  // Rest of the events are not processed
