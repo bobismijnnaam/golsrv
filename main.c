@@ -34,14 +34,10 @@ pthread_mutex_t swapMutex;
 int state = STATE_RUNNING;		// Variable holding the state
 int stateCtr = 0;				// Variable to keep track how many signals are sent in the state
 
-// Pausing variables
+// Pausing, resetting & starting bools 
 bool pauseGOL = 0;
-
-// Resetting variables
 bool resetGOL = 0;
-
-// Starting variables
-bool startGOL = 1;
+bool startGOL = 0;
 
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
