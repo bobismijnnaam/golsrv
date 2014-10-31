@@ -25,6 +25,7 @@ bool newField = false;
 
 // Mutices
 pthread_mutex_t swapMutex;
+pthread_mutex_t drawMutex;
 
 // States of the game of life
 #define STATE_RECV 			1 	// FPGA is sending a field
@@ -42,17 +43,27 @@ bool pauseGOL = false;
 bool resetGOL = false;
 bool startGOL = false;
 
+// Colors
+const int CLRPAIR_DEAD = 2;
+const int CLRPAIR_ALIVE = 3;
+
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
 		return MG_TRUE;   // Authorize all requests
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/gol")) {
 		if (newField) {
 			pthread_mutex_lock(&swapMutex);
+
+			if (SIZE <= 50)
+				pthread_mutex_lock(&drawMutex);
 			
 			bool* tempSwapField = currField;
 			currField = swapField;
 			swapField = tempSwapField;
 			newField = false;
+
+			if (SIZE <= 50)
+				pthread_mutex_unlock(&drawMutex);
 
 			pthread_mutex_unlock(&swapMutex);
 		}
@@ -265,14 +276,36 @@ int main(void) {
 		recvField[i] = 0;
 	}
 
-	printf("Initializing swapMutex\n");
+	printf("Initializing mutices\n");
 	pthread_mutex_init(&swapMutex, NULL);
+	pthread_mutex_init(&drawMutex, NULL);
 
 	// Creating server
 	printf("Starting server at 130.89.160.100:8080\n");
 	struct mg_server *server = mg_create_server(NULL, event_handler);
 	mg_set_option(server, "document_root", ".");
 	mg_set_option(server, "listening_port", "8080");
+
+	if (SIZE <= 50) {
+		// Initializing ncurses
+		initscr(); // Start curses mode
+		cbreak(); // To make sure characters aren't buffered
+		noecho(); // To hide user keypresses/not echo them
+		timeout(1000); // To block for one second while waiting for input
+		curs_set(0); // Hide the cursor
+		start_color(); // Initialize colors
+
+		// Initialize color pairs
+		init_pair(CLRPAIR_DEAD, COLOR_BLACK, COLOR_WHITE);
+		init_pair(CLRPAIR_ALIVE, COLOR_WHITE, COLOR_BLACK);
+
+		erase();
+		for (int y = 0; y < SIZE; ++y) {
+			for (int x = 0; x < SIZE; ++x) {
+				addch(' ' | COLOR_PAIR(CLRPAIR_DEAD));
+			}
+		}
+	}
 
 	// Pin report
 	printf("Pin mapping\n");
@@ -289,6 +322,27 @@ int main(void) {
 	printf("GOLSRV ready\n");
 	for (;;) {
 		mg_poll_server(server, 1000);
+
+		if (SIZE <= 50) {
+			pthread_mutex_lock(&drawMutex);
+
+			// Render the current field
+			for (int y = 0; y < SIZE; ++y) {
+				for (int x = 0; x < SIZE; ++x) {
+					move(y, x);
+					int pos = SIZE * y + x;
+					if (field[pos]) {
+						// Alive!
+						addch(' ' | COLOR_PAIR(CLRPAIR_ALIVE));
+					} else {
+						// Dead :(
+						addch(' ' | COLOR_PAIR(CLRPAIR_DEAD));
+				   }
+			   }
+		   }
+			
+			pthread_mutex_unlock(&drawMutex);
+		}
 	}
 
 	mg_destroy_server(&server);
