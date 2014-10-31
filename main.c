@@ -93,6 +93,8 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 					currField[i + 9]);
 		}
 
+		printf("FPGA       PI ----> WEB");     
+
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
 		printf("Pause request\n");
@@ -100,11 +102,14 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 		startGOL = false;
 
 		mg_printf_data(conn, "ok");
+		printf("FPGA       PI <---- WEB");     
+
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
 		printf("Reset request\n");
 		resetGOL = true;
 		mg_printf_data(conn, "ok");
+		printf("FPGA       PI <---- WEB");     
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
@@ -112,6 +117,7 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 		startGOL = true;
 		pauseGOL = false;
 		mg_printf_data(conn, "ok");
+		printf("FPGA       PI <---- WEB");     
 
 		return MG_TRUE;
 	} else {
@@ -169,6 +175,7 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 			// TODO: Temporary
 			// printField(swapField);
+			printf("FPGA ----> PI       WEB");     
 		} 
 
 		break;
@@ -214,6 +221,8 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 			// Switch to waiting for field state
 			state = STATE_RUNNING;
+			printf("FPGA <---- PI       WEB");     
+
 			break;
 		}
 		break;
@@ -229,6 +238,7 @@ void risingFPGA_CLK() {
 			digitalWrite(PI_OUT, LOW);
 			stateCtr = 0;
 			state = STATE_PAUSED;
+			printf("FPGA <---- PI       WEB");     
 			break;
 		}
 		break;
@@ -261,11 +271,13 @@ void risingFPGA_CLK() {
 			digitalWrite(PI_OUT, LOW);
 			state = STATE_PAUSED;
 			stateCtr = 0;
+			printf("FPGA <---- PI       WEB");     
 			break;
 		}
 		break;
 	case STATE_SENDING:
 		printf("\n1/0 equals...\n");
+		printf("FPGA <---- PI       WEB");     
 		stateCtr = 1/0; 	// This block is not allowed to be executed yet
 		break;				// Grammar is important
 	}
