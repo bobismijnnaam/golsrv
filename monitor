@@ -1,0 +1,7 @@
+while true
+do
+wget -O golmon localhost:8080/gol -q
+cat golmon
+printf \\n
+sleep 0.2
+done

@@ -1,24 +1,27 @@
+#include "addresses.h"
 #include "mongoose.h"
 #include <wiringPi.h>
 #include <stdio.h>
 #include <string.h>
-#include "ncurses.h"
 #include <unistd.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdbool.h>
+
+// #define MOD5_DEBUG
 
 // Pins
 const int PI_OUT = 11;
 const int FPGA_CLK = 0;
 #define DW 10
-const int D[DW] = {1, 2, 3, 3, 5, 6, 7, 8, 9, 10};
+const int D[DW] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
 // Field memory
 const int SIZE = 10;
 bool* recvField = NULL;
 bool* swapField = NULL;
 bool* currField = NULL;
-bool newField = 0;
+bool newField = false;
 
 // Mutices
 pthread_mutex_t swapMutex;
@@ -35,9 +38,9 @@ int state = STATE_RUNNING;		// Variable holding the state
 int stateCtr = 0;				// Variable to keep track how many signals are sent in the state
 
 // Pausing, resetting & starting bools 
-bool pauseGOL = 0;
-bool resetGOL = 0;
-bool startGOL = 0;
+bool pauseGOL = false;
+bool resetGOL = false;
+bool startGOL = false;
 
 static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
@@ -49,7 +52,7 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 			bool* tempSwapField = currField;
 			currField = swapField;
 			swapField = tempSwapField;
-			newField = 0;
+			newField = false;
 
 			pthread_mutex_unlock(&swapMutex);
 		}
@@ -70,15 +73,18 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
-		pauseGOL = 1;
+		printf("Pause request");
+		pauseGOL = true;
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
-		resetGOL = 1;
+		printf("Reset request");
+		resetGOL = true;
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
-		startGOL = 1;
+		printf("Start request");
+		startGOL = true;
 
 		return MG_TRUE;
 	} else {
@@ -99,6 +105,7 @@ void risingFPGA_CLK() {
 
 	switch (state) {
 	case STATE_RECV:
+		#ifdef MOD5_DEBUG
 		printf("%d|%d%d%d%d%d%d%d%d%d%d\n",digitalRead(FPGA_CLK),
 				digitalRead(D[0]),
 				digitalRead(D[1]),
@@ -110,9 +117,10 @@ void risingFPGA_CLK() {
 				digitalRead(D[7]),
 				digitalRead(D[8]),
 				digitalRead(D[9]));
+		#endif
 		// Read pins D[0..DW] and save them in array
 		for (int i = 0; i < DW; ++i) {
-			recvField[stateCtr + i] = digitalRead(D[i]) == HIGH ? 1 : 0;
+			recvField[stateCtr + i] = digitalRead(D[i]); //  == HIGH ? 1 : 0;
 		}
 		stateCtr += DW;
 		// If last row
@@ -123,7 +131,7 @@ void risingFPGA_CLK() {
 			swapField = recvField;
 			recvField = tempSwapField;
 			// newField to true
-			newField = 1;
+			newField = true;
 			pthread_mutex_unlock(&swapMutex);
 			// Set state to STATE_RUNNING
 			state = STATE_RUNNING;
@@ -131,24 +139,22 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 			// TODO: Temporary
 			printField(swapField);
-			int a = 1/0;
-		} else {
-			// CARRY ON huehuehuehue
-			// As in wait for next delivery
-		}
+		} 
 
 		break;
 	case STATE_RUNNING:
+		printf("Waiting...\n");
 		// Set pin to 0
 		digitalWrite(PI_OUT, LOW);
 		// Check if FPGA wants to send
 		if (digitalRead(D[0]) == HIGH) {
+			printf("FPGA_CLK signal\n");
 			state = STATE_RECV;
 			stateCtr = 0;
-			printf("FPGA is going to send\n");
+			// printf("FPGA is going to send\n");
 		} else {
 			if (pauseGOL) {
-				pauseGOL = 0;
+				pauseGOL = false;
 				state = STATE_PAUSING;
 			}
 		}
@@ -196,9 +202,11 @@ void risingFPGA_CLK() {
 		if (resetGOL) {
 			state = STATE_RESETTING;
 			stateCtr = 0;
+			resetGOL = false;
 		} else if (startGOL) {
 			state = STATE_STARTING;
 			stateCtr = 0;
+			startGOL = false;
 		}
 		break;
 	case STATE_RESETTING:
@@ -217,7 +225,6 @@ void risingFPGA_CLK() {
 			break;
 		case 3:
 			digitalWrite(PI_OUT, LOW);
-			resetGOL = 0;
 			state = STATE_PAUSED;
 			break;
 		}
@@ -228,45 +235,63 @@ void risingFPGA_CLK() {
 }
 
 int main(void) {
-	currField = (bool *) malloc(SIZE * SIZE * sizeof(bool));
-	swapField = (bool *) malloc(SIZE * SIZE * sizeof(bool));
-	recvField = (bool *) malloc(SIZE * SIZE * sizeof(bool));
-
-	printField(currField);
-	printField(swapField);
-	printField(recvField);
-
-	pthread_mutex_init(&swapMutex, NULL);
-
-	// printf("Starting server at 130.89.160.100:8080\n");
-
-	// struct mg_server *server = mg_create_server(NULL, event_handler);
-	// mg_set_option(server, "document_root", ".");
-	// mg_set_option(server, "listening_port", "8080");
+	printf("********\n*GOLSRV*\n********\n");
 
 	// Initialize wiringPi
+	printf("Setting up wiringPi\n");
 	wiringPiSetup();
-
+	printf("Initializing pins. Are SCL and SDA grounded?\n");
 	// Set the message pin from pi to fpga to out
 	pinMode(PI_OUT, OUTPUT);
 	digitalWrite(PI_OUT, LOW);
-
 	// Set fpga clock pin to input and register rising edge function
 	pinMode(FPGA_CLK, INPUT);
 	pullUpDnControl(FPGA_CLK, PUD_DOWN);
 	wiringPiISR(FPGA_CLK, INT_EDGE_RISING, risingFPGA_CLK);
-
-	// Set the data pins to input and register the rising edge function for D[0]
+	// Set the data pins to input & pull them down 
 	for (int i = 0; i < DW; ++i) {
 		pinMode(D[i], INPUT);
 		pullUpDnControl(D[i], PUD_DOWN);
 	}
-
-	for (;;) {
-		// mg_poll_server(server, 1000);  // Infinite loop, Ctrl-C to stop
+	
+	// Allocating & normalizing arrays
+	printf("Allocating & normalizing GOL buffers\n");
+	currField = (bool *) malloc(SIZE * SIZE * sizeof(bool));
+	swapField = (bool *) malloc(SIZE * SIZE * sizeof(bool));
+	recvField = (bool *) malloc(SIZE * SIZE * sizeof(bool));
+	for (int i = 0; i < SIZE * SIZE; ++i) {
+		currField[i] = 0;
+		swapField[i] = 0;
+		recvField[i] = 0;
 	}
 
-	// mg_destroy_server(&server);
+	printf("Initializing swapMutex\n");
+	pthread_mutex_init(&swapMutex, NULL);
+
+	// Creating server
+	printf("Starting server at 130.89.160.100:8080\n");
+	struct mg_server *server = mg_create_server(NULL, event_handler);
+	mg_set_option(server, "document_root", ".");
+	mg_set_option(server, "listening_port", "8080");
+
+	// Pin report
+	printf("Pin mapping\n");
+	printf("Input pins:\n");
+	printf("\tInternal = wiringPi\t= GPIO Rev2\n");
+	printf("\tFPGA_CLK = %d\t\t= %d\n", FPGA_CLK, wpiPinToGpio(FPGA_CLK));
+	for (int i = 0; i < DW; ++i) {
+		printf("\tD[%d]\t = %d\t\t= %d\n", i, D[i], wpiPinToGpio(D[i]));
+	}
+	printf("Output pins:\n");
+	printf("\tPI_OUT\t = %d\t\t= %d\n", PI_OUT, wpiPinToGpio(PI_OUT));
+
+	// Primary server loop
+	printf("GOLSRV ready\n");
+	for (;;) {
+		mg_poll_server(server, 1000);
+	}
+
+	mg_destroy_server(&server);
 	
 	pthread_mutex_destroy(&swapMutex);
 

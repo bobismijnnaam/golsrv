@@ -1,2 +1,1 @@
-#!/bin/sh
-./bin/golsrv
+sudo ./bin/golsrv

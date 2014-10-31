@@ -1,6 +1,10 @@
 MFLAGS = -DMONGOOSE_NO_DIRECTORY_LISTING
-FLAGS = -Wall $(MFLAGS) -Imongoose -pthread -lwiringPi -std=c99 -I/usr/local/include -L/usr/local/lib -lwiringPi
+FLAGS = -Wall $(MFLAGS) -Imongoose -pthread -lwiringPi -std=c99
 
 : mongoose/mongoose.c |> gcc -c %f -o %o $(FLAGS) |> build/mongoose.o
 : main.c |> gcc -c %f -o %o $(FLAGS) |> build/main.o
 : build/*.o |> gcc %f -o %o $(FLAGS) |> bin/golsrv
+
+FLAGS = -Wall -pthread -lwiringPi -std=c99 -D_GNU_SOURCE=1
+
+: batchread.c |> gcc %f -o %o $(FLAGS) |> bin/batchread
