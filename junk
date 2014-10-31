@@ -1,0 +1,26 @@
+********
+*GOLSRV*
+********
+Setting up wiringPi
+Initializing pins. Are SCL and SDA grounded?
+Allocating & normalizing GOL buffers
+Initializing mutices
+Starting server at 130.89.160.100:8080
+[?1049h[1;24r(B[m[4l[?7h[?25l[39;49mPin mapping
+Input pins:
+	Internal = wiringPi	= GPIO Rev2
+	FPGA_CLK = 0		= 17
+	D[0]	 = 1		= 18
+	D[1]	 = 2		= 27
+	D[2]	 = 3		= 22
+	D[3]	 = 4		= 23
+	D[4]	 = 5		= 24
+	D[5]	 = 6		= 25
+	D[6]	 = 7		= 4
+	D[7]	 = 8		= 2
+	D[8]	 = 9		= 3
+	D[9]	 = 10		= 8
+Output pins:
+	PI_OUT	 = 11		= 7
+GOLSRV ready
+Start requestPause requestStart requestPause requestReset request[39;49m[24;1H[K[24;1H[?12l[?25h[?1049l[?1l>

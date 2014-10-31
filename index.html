@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	<link rel="stylesheet" href="style.css">
+	<link href='http://fonts.googleapis.com/css?family=Roboto' rel='stylesheet' type='text/css'>
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+	
+  </head>
+	<body>
+	  <div class="container">
+	    <div class="header">
+		  <h1 class="title">Game of life</h1> 
+		  <p class="headertext">Made by Tim Evci, Olaf Haalstra, Hans van der Heide and Bob Rubbens</p>
+	    </div>
+		<div class="push" style="margin-top: 64px">
+		</div>
+		<div class="button">
+			<input type="checkbox" id="switch" name="switch" class="switch" value="1" />
+			<label id="label" for="switch">On/Off</label>
+			<div id="wrapper"></div>
+			<button type="button" id="clear" style="display:none;" onclick="resetField()">Clear</button>
+			<button type="button" id="submit" style="display:none;"onclick="alert(file);"> Submit </button>
+		</div>
+		<div class="content">
+			<p style="padding-top: 50px;">Welcome to Game of life. Can be turned on with the switch on the left.</p>
+	    </div>
+	  </div>
+	</body>
+	<script>
+		//Global variables
+		var context;
+		var mousePos;
+		var height; 				//How many cells fit on the canvas
+		var sdatalen;				/*The sqrt of the datalength, 
+									corresponds to fieldsize */
+		var canvas;					//The canvas
+		var size; 					//block size
+		var animationSpeed = 100;	//Draw new field every x millis
+		var h;						//How many cells fit on the canvas
+		var file;					//User input data
+		var firsttime = 1;			//Yes it is the first time the program runs
+		var state = new Array(h);	//Creates empty array for user input 
+		var screensize = $(window).height();	//Initilize screensize
+		var oldscreensize;			//Stores the oldscreensize
+		var data = '';				//Initialize data
+		var counter = 0;			//Counts how many times the same data has been received
+			
+		
+		window.onresize = function(event) {
+			screensize = $(window).height();
+			console.log('size changed');
+		};
+
+		
+		/* Draw on the canvas for own start field */
+				
+		//Get the current position of the mouse
+		function getMousePos(canvas, evt) {
+				var rect = canvas.getBoundingClientRect();
+				return {
+					x: evt.clientX - rect.left,
+					y: evt.clientY - rect.top
+				};
+			}
+			
+		//Fill the file with the presented data from the field
+		function fillFile() { 
+		file = '';
+			for (var x = 0; x < state.length; x++) {
+				for (var y =0; y < state.length; y++) {
+					file += state[x][y];
+				}
+			};
+		}
+		
+		//This happens when the canvas is clicked
+		$('.content').on('click','#gol',function(e) {
+			
+			//The fill function to draw the squares
+			function fill(s, gx, gy) {
+				context.fillStyle = s;
+				context.fillRect(gx * size, gy * size, size, size);
+			}
+			
+			//Calculate grid square numbers
+			var gx = ~~(mousePos.x/size);
+			var gy = ~~(mousePos.y/size);
+			
+			//Boundary check
+			if (gx < 0 || gx >= h || gy < 0 || gy >= h) {
+				return;
+			}
+			
+			//Check if the field is empty to draw on
+			if (!$('#switch').prop('checked')){
+				if (document.getElementById("submit").disabled){
+					var confirm = window.confirm('Please clear the field');
+						if (confirm) {
+							resetField();
+						} else {
+							// do nothing
+						}
+				} else {
+					//Fill the field with the correct colour
+					if (Boolean(state[gy][gx])) {
+						fill('white', gx, gy);
+						state[gy][gx] = 0;
+					} else {
+						state[gy][gx] = 1;
+						fill('black', gx, gy);
+					}
+					fillFile();
+				}
+				
+			} else {
+				//do nothing
+			}
+		});
+		
+//TODO send field to fpga when SUBMIT button is pressed.
+		
+		//This happens when the reset button has been pressed
+		function resetField() {
+		
+			//Display the buttons correctly
+			$('#submit').removeAttr('disabled');			
+
+
+			//Create canvas 
+			$('.content').html('<canvas id="gol"> </canvas>');
+			
+			size = height/sdatalen;
+			canvas = document.getElementById('gol');
+			canvas.setAttribute('width', height);
+			canvas.setAttribute('height', height);
+			h = ~~(canvas.height / size);
+			context = canvas.getContext('2d');
+			
+			//Add event listener so that mouse position can be obtained
+			canvas.addEventListener('mousemove', function(evt) {
+				mousePos = getMousePos(canvas, evt);
+			}, false);
+			
+			//Create empty state array
+			for (var y = 0; y < h; ++y){
+				state[y] = new Array(h);
+			}
+			
+			//Fill array with zeros in case this is submitted
+			for (var x = 0; x < state.length; x++) {
+				for (var y =0; y < state.length; y++) {
+					state[x][y] = 0;
+				}
+			};
+			fillFile();
+			
+			//Guidelines in the canvas
+			context.font= height/20 + 'px' + ' Roboto';
+			context.textAlign="center";
+			context.fillText("You can now fill your own field!", canvas.width/2, canvas.width/5);
+			context.fillText("Click to add a cell, click again to remove it", canvas.width/2, canvas.width/4);
+			
+			//Should be /reset
+			$.get("/reset", function(){
+				//Reset has been called. FPGA should reset to initial state.
+			});
+		}
+		
+		
+		// The draw field function
+		function drawField(data){
+			console.log('i have been called');
+		
+			//Check if field is a square
+			if (Math.sqrt(data.length) % 1 != 0) {
+				$('.push').css('margin-top', $('.header').height() + 'px');
+				$('.content').html('<canvas id="gol" style="display:none;"></canvas>Not a rectangle');
+			} else {
+			
+				//Obtain variables
+				var datalength = data.length;
+				sdatalen = Math.sqrt(data.length);
+				size = height/sdatalen;
+				h = height/size;
+				
+				//Creat canvas
+				$('.content').html('<canvas id="gol"></canvas>');
+				canvas = document.getElementById('gol');
+				context = canvas.getContext('2d');
+				
+				//Add event listener so that mouse position can be obtained
+				canvas.addEventListener('mousemove', function(evt) {
+					mousePos = getMousePos(canvas, evt);
+				}, false);
+				
+				//Set canvas properties
+				$(function () {
+					canvas.height = height;
+					canvas.width = height;
+					$('#gol').height(height);
+					$('#gol').width(height);
+					$('.push').css('margin-top', $('.header').height() + 'px');
+
+				});
+				
+				//Shape function to create cells
+				function Shape(x, y, w, h, fill) {
+					this.x = x;
+					this.y = y;
+					this.w = w;
+					this.h = h;
+					this.fill = fill;
+				}
+				
+				//'Push' the zero's and one's into the field
+				if (canvas.getContext) {
+					var blocksize = canvas.width/sdatalen;
+					var myRect = [];
+					var x = 0;
+					var y = 0;
+					var c = 0;
+					for (i=0; i < data.length; i++) {
+						if (c >= sdatalen){
+							y = y+blocksize;
+							c = 0;
+							x = 0;
+						}
+						if (data[i] == 0){
+							myRect.push(new Shape(x, y, blocksize+1, blocksize+1, '#fff'));
+						} else if (data[i] == 1){
+							myRect.push(new Shape(x, y, blocksize+1, blocksize+1, '#000'));
+						} else {
+							$('.content').html('<canvas id="gol" style="display:none;"></canvas>Invalid data');
+						}
+					  c++;
+					  x = x +blocksize;
+					}
+					
+					for (var i in myRect) {
+						oRec = myRect[i];
+						context.fillStyle = oRec.fill;
+						context.fillRect(oRec.x, oRec.y, oRec.w, oRec.h);
+					}
+				}
+			}
+		
+		}
+			
+		// A $( document ).ready() block.
+		$( document ).ready(function() {
+		
+			//Adapt height when resizing window and obtain it first time
+			height = screensize-$('.header').height();
+			$( window ).resize(function() {
+				height = $(window).height()-$('.header').height(); 
+			});
+			//should be /gol
+			$.get("/gol", function( data ){
+				var dataold = data;					//olddata to check if received data is the same as current data
+				oldscreensize = $(window).height(); //oldscreensize to check wheter the displayheight was changed and canvas needs to be redrawn
+				
+				/*//random function for fake display
+				var dataTimer = setInterval(function() {
+					data = '';
+					var possible = "010000";
+						for( var i=0; i < 10000; i++ ) {
+							data += possible.charAt(Math.floor(Math.random() * possible.length));
+						}
+				}, 1000);*/
+				
+				//If the on/off switch is switched
+				$('.button :checkbox').change(function() { 
+					//Proper button layout, doesnt need to be changed every time.
+					if($('#switch').prop('checked')){
+							document.getElementById('label').style.textIndent="0px"
+							$('#clear').attr('disabled', 'disabled').removeAttr('style');
+							$('#submit').attr('disabled', 'disabled').removeAttr('style');
+							//Should be /start
+							$.get("/start", function(){
+								//Start has been called. FPGA should now start ASAP
+							});
+						} else {
+							$('#clear').removeAttr('disabled');
+							//Should be /pause
+							$.get("/pause", function(){
+								//Pause has been called. FPGA should now stop ASAP
+							});
+						}
+				
+						//Repeated block
+						var myTimer = setInterval(function() {
+							//Drawing on/off
+							if($('#switch').prop('checked')){
+								if(!Boolean(firsttime) && data == dataold && oldscreensize == screensize) {
+									// Same data received. Nothing to be done.
+								} else {
+									//Data received, set properties, draw field
+									counter = 0;
+									dataold = data;	
+									oldscreensize = screensize;
+									firsttime = 0; 	
+									drawField(data);
+								}
+							} else {
+								
+								
+								//Drawing the last incoming data
+								if(!Boolean(firsttime) && data == dataold && oldscreensize == screensize ) {
+										counter++;
+									} else {
+										//Make sure user isn't creating own field
+										if(document.getElementById("submit").disabled){
+											dataold = data;		
+											oldscreensize = screensize;
+											firsttime = 0; 											
+											drawField(data);
+											counter = 0;
+										} else {
+											//The user is generating input
+										}
+									}
+									
+									//Terminate drawing after a couple of the same data is received
+									if (counter > 16) {
+										clearInterval(myTimer);
+									}
+								}
+						}, animationSpeed);
+				});
+			});
+		});
+	</script>
+</html>

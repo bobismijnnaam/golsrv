@@ -48,11 +48,11 @@ p.headertext {
 }
 
 @media (min-width: 680px) { 
-	/* .button{float: left; width: 1px; } */
+	/*.button{float: left; width: 1px; } */
 	.content{width: 80% !important; margin-left: 10%;}
 } 
 
-.button{float: left; width: 53px; }
+.button{float: left; width: 53px; margine-left: 3px; }
 #wrapper {float:left; width: 100%;}
 
 

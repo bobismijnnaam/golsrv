@@ -7,8 +7,10 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "ncurses.h"
 
 // #define MOD5_DEBUG
+// #define MOD5_CURSES
 
 // Pins
 const int PI_OUT = 11;
@@ -84,18 +86,21 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
-		printf("Pause request");
+		printf("Pause request\n");
 		pauseGOL = true;
 
+		mg_printf_data(conn, "ok");
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
-		printf("Reset request");
+		printf("Reset request\n");
 		resetGOL = true;
+		mg_printf_data(conn, "ok");
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
-		printf("Start request");
+		printf("Start request\n");
 		startGOL = true;
+		mg_printf_data(conn, "ok");
 
 		return MG_TRUE;
 	} else {
@@ -286,26 +291,26 @@ int main(void) {
 	mg_set_option(server, "document_root", ".");
 	mg_set_option(server, "listening_port", "8080");
 
-	if (SIZE <= 50) {
-		// Initializing ncurses
-		initscr(); // Start curses mode
-		cbreak(); // To make sure characters aren't buffered
-		noecho(); // To hide user keypresses/not echo them
-		timeout(1000); // To block for one second while waiting for input
-		curs_set(0); // Hide the cursor
-		start_color(); // Initialize colors
+#ifdef MOD5_CURSES
+	// Initializing ncurses
+	initscr(); // Start curses mode
+	cbreak(); // To make sure characters aren't buffered
+	noecho(); // To hide user keypresses/not echo them
+	timeout(1000); // To block for one second while waiting for input
+	curs_set(0); // Hide the cursor
+	start_color(); // Initialize colors
 
-		// Initialize color pairs
-		init_pair(CLRPAIR_DEAD, COLOR_BLACK, COLOR_WHITE);
-		init_pair(CLRPAIR_ALIVE, COLOR_WHITE, COLOR_BLACK);
+	// Initialize color pairs
+	init_pair(CLRPAIR_DEAD, COLOR_BLACK, COLOR_WHITE);
+	init_pair(CLRPAIR_ALIVE, COLOR_WHITE, COLOR_BLACK);
 
-		erase();
-		for (int y = 0; y < SIZE; ++y) {
-			for (int x = 0; x < SIZE; ++x) {
-				addch(' ' | COLOR_PAIR(CLRPAIR_DEAD));
-			}
+	erase();
+	for (int y = 0; y < SIZE; ++y) {
+		for (int x = 0; x < SIZE; ++x) {
+			addch(' ' | COLOR_PAIR(CLRPAIR_DEAD));
 		}
 	}
+#endif
 
 	// Pin report
 	printf("Pin mapping\n");
@@ -323,26 +328,26 @@ int main(void) {
 	for (;;) {
 		mg_poll_server(server, 1000);
 
-		if (SIZE <= 50) {
-			pthread_mutex_lock(&drawMutex);
+#ifdef MOD5_CURSES
+		pthread_mutex_lock(&drawMutex);
 
-			// Render the current field
-			for (int y = 0; y < SIZE; ++y) {
-				for (int x = 0; x < SIZE; ++x) {
-					move(y, x);
-					int pos = SIZE * y + x;
-					if (field[pos]) {
-						// Alive!
-						addch(' ' | COLOR_PAIR(CLRPAIR_ALIVE));
-					} else {
-						// Dead :(
-						addch(' ' | COLOR_PAIR(CLRPAIR_DEAD));
-				   }
-			   }
-		   }
-			
-			pthread_mutex_unlock(&drawMutex);
+		// Render the current field
+		for (int y = 0; y < SIZE; ++y) {
+			for (int x = 0; x < SIZE; ++x) {
+				move(y, x);
+				int pos = SIZE * y + x;
+				if (currField[pos]) {
+					// Alive!
+					addch(' ' | COLOR_PAIR(CLRPAIR_ALIVE));
+				} else {
+					// Dead :(
+					addch(' ' | COLOR_PAIR(CLRPAIR_DEAD));
+				}
+			}
 		}
+			
+		pthread_mutex_unlock(&drawMutex);
+#endif
 	}
 
 	mg_destroy_server(&server);
