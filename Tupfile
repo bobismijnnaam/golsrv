@@ -1,5 +1,5 @@
 MFLAGS = -DMONGOOSE_NO_DIRECTORY_LISTING
-FLAGS = -Wall $(MFLAGS) -Imongoose -pthread -lwiringPi -lncurses -std=c99
+FLAGS = -Wall $(MFLAGS) -Imongoose -pthread -lwiringPi -lncurses -std=gnu99
 
 : mongoose/mongoose.c |> gcc -c %f -o %o $(FLAGS) |> build/mongoose.o
 : main.c |> gcc -c %f -o %o $(FLAGS) |> build/main.o

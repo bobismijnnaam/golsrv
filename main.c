@@ -9,6 +9,14 @@
 #include <stdbool.h>
 #include "ncurses.h"
 
+// Net magic includes
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+
 // #define MOD5_DEBUG
 // #define MOD5_CURSES
 
@@ -19,7 +27,8 @@ const int FPGA_CLK = 0;
 const int D[DW] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 
 // Field memory
-const int SIZE = 10;
+#define DEFAULT_SIZE 40
+int SIZE = DEFAULT_SIZE;
 bool* recvField = NULL;
 bool* swapField = NULL;
 bool* currField = NULL;
@@ -88,6 +97,7 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
 		printf("Pause request\n");
 		pauseGOL = true;
+		startGOL = false;
 
 		mg_printf_data(conn, "ok");
 		return MG_TRUE;
@@ -100,6 +110,7 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
 		printf("Start request\n");
 		startGOL = true;
+		pauseGOL = false;
 		mg_printf_data(conn, "ok");
 
 		return MG_TRUE;
@@ -118,10 +129,12 @@ void printField(bool* field) {
 }
 
 void risingFPGA_CLK() {
-
 	switch (state) {
 	case STATE_RECV:
-		#ifdef MOD5_DEBUG
+		if (startGOL)
+			startGOL = false;
+
+		/*
 		printf("%d|%d%d%d%d%d%d%d%d%d%d\n",digitalRead(FPGA_CLK),
 				digitalRead(D[0]),
 				digitalRead(D[1]),
@@ -133,7 +146,8 @@ void risingFPGA_CLK() {
 				digitalRead(D[7]),
 				digitalRead(D[8]),
 				digitalRead(D[9]));
-		#endif
+				*/
+
 		// Read pins D[0..DW] and save them in array
 		for (int i = 0; i < DW; ++i) {
 			recvField[stateCtr + i] = digitalRead(D[i]); //  == HIGH ? 1 : 0;
@@ -154,12 +168,15 @@ void risingFPGA_CLK() {
 			// Reset stateCtr
 			stateCtr = 0;
 			// TODO: Temporary
-			printField(swapField);
+			// printField(swapField);
 		} 
 
 		break;
 	case STATE_RUNNING:
-		printf("Waiting...\n");
+		// printf("Waiting...\n");
+		if (startGOL)
+			startGOL = false;
+
 		// Set pin to 0
 		digitalWrite(PI_OUT, LOW);
 		// Check if FPGA wants to send
@@ -170,6 +187,7 @@ void risingFPGA_CLK() {
 			// printf("FPGA is going to send\n");
 		} else {
 			if (pauseGOL) {
+				printf("Sending pause to FPGA\n");
 				pauseGOL = false;
 				state = STATE_PAUSING;
 			}
@@ -242,9 +260,12 @@ void risingFPGA_CLK() {
 		case 3:
 			digitalWrite(PI_OUT, LOW);
 			state = STATE_PAUSED;
+			stateCtr = 0;
 			break;
 		}
+		break;
 	case STATE_SENDING:
+		printf("\n1/0 equals...\n");
 		stateCtr = 1/0; 	// This block is not allowed to be executed yet
 		break;				// Grammar is important
 	}
@@ -252,6 +273,53 @@ void risingFPGA_CLK() {
 
 int main(void) {
 	printf("********\n*GOLSRV*\n********\n");
+	
+	// Auto-detect
+	printf("Auto-detect size? (Y/n) ");
+	char input[64];
+	fgets(input, sizeof input, stdin);
+	if (input[0] == 'Y') {
+		printf("Auto detection complete. Select preferred size:\n");
+		printf("a) 10x10\n");
+		printf("b) 20x20\n");
+		printf("c) 30x30\n");
+		printf("d) 40x40\n");
+		printf("Choice: "); fflush(stdout);
+		input[0] = '\0';
+		fgets(input, sizeof input, stdin);
+		switch(input[0]) {
+		case 'a':
+		case 'A':
+			SIZE = 10;
+			break;
+		case 'b':
+		case 'B':
+			SIZE = 20;
+			break;
+		case 'c':
+		case 'C':
+			SIZE = 30;
+			break;
+		case 'd':
+		case 'D':
+			SIZE = 40;
+			break;
+		default:
+			SIZE = DEFAULT_SIZE;
+			break;
+		}
+	} else {
+		printf("Auto detect cancelled. Enter dimension of Game of Life field: "); fflush(stdout);
+		input[0] = '\0';
+		fgets(input, sizeof input, stdin);
+		SIZE = strtol(input, NULL, 10);
+		if (SIZE < 10 || SIZE % 10 != 0) {
+			SIZE = DEFAULT_SIZE;
+		} else {
+			printf("Illegal size");
+		}	
+	}
+	printf("Chosen size: %dx%d\n", SIZE, SIZE);
 
 	// Initialize wiringPi
 	printf("Setting up wiringPi\n");
@@ -286,7 +354,17 @@ int main(void) {
 	pthread_mutex_init(&drawMutex, NULL);
 
 	// Creating server
-	printf("Starting server at 130.89.160.100:8080\n");
+	// Ip detection magic
+	printf("Auto-detecting ip...\n");
+	int fd;
+	struct ifreq ifr;
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	ifr.ifr_addr.sa_family = AF_INET;
+	strncpy(ifr.ifr_name, "eth0", IFNAMSIZ-1);
+	ioctl(fd, SIOCGIFADDR, &ifr);
+	close(fd);
+	// Actually initializing server
+	printf("Starting server at %s:8080\n", inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
 	struct mg_server *server = mg_create_server(NULL, event_handler);
 	mg_set_option(server, "document_root", ".");
 	mg_set_option(server, "listening_port", "8080");
