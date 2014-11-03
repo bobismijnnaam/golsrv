@@ -58,23 +58,25 @@ bool startGOL = false;
 const int CLRPAIR_DEAD = 2;
 const int CLRPAIR_ALIVE = 3;
 
-static int event_handler(struct mg_connection *conn, enum mg_event ev) {
+int event_handler(struct mg_connection *conn, enum mg_event ev) {
 	if (ev == MG_AUTH) {
 		return MG_TRUE;   // Authorize all requests
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/gol")) {
 		if (newField) {
 			pthread_mutex_lock(&swapMutex);
 
-			if (SIZE <= 50)
-				pthread_mutex_lock(&drawMutex);
+#ifdef MOD5_CURSES
+			pthread_mutex_lock(&drawMutex);
+#endif
 			
 			bool* tempSwapField = currField;
 			currField = swapField;
 			swapField = tempSwapField;
 			newField = false;
 
-			if (SIZE <= 50)
-				pthread_mutex_unlock(&drawMutex);
+#ifdef MOD5_CURSES
+			pthread_mutex_unlock(&drawMutex);
+#endif
 
 			pthread_mutex_unlock(&swapMutex);
 		}
@@ -93,7 +95,7 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 					currField[i + 9]);
 		}
 
-		printf("FPGA       PI ----> WEB");     
+		// printf("FPGA       PI ----> WEB\n");     
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/pause")) {
@@ -102,14 +104,14 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 		startGOL = false;
 
 		mg_printf_data(conn, "ok");
-		printf("FPGA       PI <---- WEB");     
+		printf("FPGA       PI <---- WEB\n");     
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/reset")) {
 		printf("Reset request\n");
 		resetGOL = true;
 		mg_printf_data(conn, "ok");
-		printf("FPGA       PI <---- WEB");     
+		printf("FPGA       PI <---- WEB\n");     
 
 		return MG_TRUE;
 	} else if (ev == MG_REQUEST && !strcmp(conn->uri, "/start")) {
@@ -117,7 +119,7 @@ static int event_handler(struct mg_connection *conn, enum mg_event ev) {
 		startGOL = true;
 		pauseGOL = false;
 		mg_printf_data(conn, "ok");
-		printf("FPGA       PI <---- WEB");     
+		printf("FPGA       PI <---- WEB\n");     
 
 		return MG_TRUE;
 	} else {
@@ -152,7 +154,7 @@ void risingFPGA_CLK() {
 				digitalRead(D[7]),
 				digitalRead(D[8]),
 				digitalRead(D[9]));
-				*/
+		*/		
 
 		// Read pins D[0..DW] and save them in array
 		for (int i = 0; i < DW; ++i) {
@@ -175,7 +177,7 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 			// TODO: Temporary
 			// printField(swapField);
-			printf("FPGA ----> PI       WEB");     
+			printf("FPGA ----> PI       WEB\n");     
 		} 
 
 		break;
@@ -188,13 +190,13 @@ void risingFPGA_CLK() {
 		digitalWrite(PI_OUT, LOW);
 		// Check if FPGA wants to send
 		if (digitalRead(D[0]) == HIGH) {
-			printf("FPGA_CLK signal\n");
+			printf("FPGA ----> PI       WEB\n");
 			state = STATE_RECV;
 			stateCtr = 0;
 			// printf("FPGA is going to send\n");
 		} else {
 			if (pauseGOL) {
-				printf("Sending pause to FPGA\n");
+				// printf("Sending pause to FPGA\n");
 				pauseGOL = false;
 				state = STATE_PAUSING;
 			}
@@ -221,7 +223,7 @@ void risingFPGA_CLK() {
 			stateCtr = 0;
 			// Switch to waiting for field state
 			state = STATE_RUNNING;
-			printf("FPGA <---- PI       WEB");     
+			printf("FPGA <---- PI       WEB\n");     
 
 			break;
 		}
@@ -238,7 +240,7 @@ void risingFPGA_CLK() {
 			digitalWrite(PI_OUT, LOW);
 			stateCtr = 0;
 			state = STATE_PAUSED;
-			printf("FPGA <---- PI       WEB");     
+			printf("FPGA <---- PI       WEB\n");     
 			break;
 		}
 		break;
@@ -271,13 +273,13 @@ void risingFPGA_CLK() {
 			digitalWrite(PI_OUT, LOW);
 			state = STATE_PAUSED;
 			stateCtr = 0;
-			printf("FPGA <---- PI       WEB");     
+			printf("FPGA <---- PI       WEB\n");     
 			break;
 		}
 		break;
 	case STATE_SENDING:
 		printf("\n1/0 equals...\n");
-		printf("FPGA <---- PI       WEB");     
+		printf("FPGA <---- PI       WEB\n");     
 		stateCtr = 1/0; 	// This block is not allowed to be executed yet
 		break;				// Grammar is important
 	}
@@ -288,6 +290,7 @@ int main(void) {
 	
 	// Auto-detect
 	printf("Auto-detect size? (Y/n) ");
+	fflush(stdout);
 	char input[64];
 	fgets(input, sizeof input, stdin);
 	if (input[0] == 'Y') {
@@ -326,9 +329,8 @@ int main(void) {
 		fgets(input, sizeof input, stdin);
 		SIZE = strtol(input, NULL, 10);
 		if (SIZE < 10 || SIZE % 10 != 0) {
+			printf("Illegal size\n");
 			SIZE = DEFAULT_SIZE;
-		} else {
-			printf("Illegal size");
 		}	
 	}
 	printf("Chosen size: %dx%d\n", SIZE, SIZE);
